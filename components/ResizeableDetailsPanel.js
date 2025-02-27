@@ -247,6 +247,19 @@ export default function ResizableDetailsPanel({ node, nodeById, graphData }) {
                 </p>
               </div>
             )}
+            
+            {url && (
+              <div style={{marginTop: '8px'}}>
+                <a 
+                  href={url}
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{color: '#3b82f6', textDecoration: 'underline', fontSize: '14px'}} 
+                >
+                  View Paper
+                </a>
+              </div>
+            )}
           </div>
         )}
         
