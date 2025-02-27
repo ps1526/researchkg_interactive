@@ -32,7 +32,7 @@ export default function GraphVisualizer({
     const svg = d3.select(svgRef.current)
       .attr("width", width)
       .attr("height", height);
-      
+  
     // Add zoom behavior
     const zoom = d3.zoom()
       .extent([[0, 0], [width, height]])
@@ -42,10 +42,11 @@ export default function GraphVisualizer({
       });
       
     svg.call(zoom);
-    
-    // Create a group for zooming
-    const g = svg.append("g");
-    
+
+    // Create a group for zooming and center it initially
+    const g = svg.append("g")
+      .attr("transform", `translate(${width/2}, ${height/2})`);
+        
     // Prepare the arrow marker for links
     svg.append("defs").selectAll("marker")
       .data(["arrow", "arrow-highlighted", "arrow-cycle"])
@@ -58,7 +59,7 @@ export default function GraphVisualizer({
       .attr("markerHeight", 6)
       .attr("orient", "auto")
       .append("path")
-      .attr("fill", d => d === "arrow-highlighted" ? "#ff6b6b" : d === "arrow-cycle" ? "#ff4500" : "#999")
+      .attr("fill", d => d === "arrow-highlighted" ? "#008080" : d === "arrow-cycle" ? "#ff4500" : "#999")
       .attr("d", "M0,-5L10,0L0,5");
     
     // Process nodes and links for the simulation
@@ -130,10 +131,10 @@ export default function GraphVisualizer({
     
     // Create the force simulation
     simulationRef.current = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(100))
-      .force("charge", d3.forceManyBody().strength(-200))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(d => getNodeRadius(d) + 10))
+      .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+      .force("charge", d3.forceManyBody().strength(-300))
+      .force("center", d3.forceCenter(0, 0))
+      .force("collision", d3.forceCollide().radius(d => getNodeRadius(d) + 15))
       .on("tick", () => {
         link
           .attr("x1", d => d.source.x)
@@ -144,6 +145,8 @@ export default function GraphVisualizer({
         node
           .attr("transform", d => `translate(${d.x},${d.y})`);
       });
+
+    svg.call(zoom.transform, d3.zoomIdentity.translate(width/2, height/2).scale(0.6));
     
     // Add click handler to background for deselecting
     svg.on("click", () => onNodeSelect(null));
@@ -303,30 +306,39 @@ export default function GraphVisualizer({
     
     // If nodes are highlighted by search/filter
     if (highlightedNodes && highlightedNodes.size > 0) {
-      // Dim non-highlighted nodes
+      // Make non-highlighted nodes very transparent
       svg.selectAll(".node")
         .filter(d => !highlightedNodes.has(d.id))
-        .attr("opacity", 0.3);
+        .attr("opacity", 0.15); // Much more transparent
+      
+      // Make non-highlighted links nearly invisible  
+      svg.selectAll("line")
+        .attr("opacity", d => {
+          const sourceId = d.source.id || d.source;
+          const targetId = d.target.id || d.target;
+          return highlightedNodes.has(sourceId) && highlightedNodes.has(targetId) ? 1 : 0.1;
+        });
         
-      // Ensure highlighted nodes are fully visible
+      // Make highlighted nodes stand out more
       svg.selectAll(".node")
         .filter(d => highlightedNodes.has(d.id))
         .attr("opacity", 1)
         .select("circle")
         .attr("stroke", d => selectedNode && d.id === selectedNode.id ? "#ff6b6b" : "#ffb703")
-        .attr("stroke-width", d => selectedNode && d.id === selectedNode.id ? 3 : 2);
-        
-      // Dim links that don't connect highlighted nodes
-      svg.selectAll("line")
-        .attr("opacity", d => {
-          const sourceId = d.source.id || d.source;
-          const targetId = d.target.id || d.target;
-          return highlightedNodes.has(sourceId) && highlightedNodes.has(targetId) ? 1 : 0.2;
-        });
+        .attr("stroke-width", d => selectedNode && d.id === selectedNode.id ? 3 : 2.5)
+        .attr("r", d => getNodeRadius(d) * 1.2); // Make highlighted nodes 20% larger
+      
+      // Make highlighted node labels more visible
+      svg.selectAll(".node")
+        .filter(d => highlightedNodes.has(d.id))
+        .select("text")
+        .attr("font-weight", "bold");
     } else {
       // Reset opacity if no highlights
       svg.selectAll(".node").attr("opacity", 1);
       svg.selectAll("line").attr("opacity", 0.6);
+      svg.selectAll(".node circle").attr("r", d => getNodeRadius(d));
+      svg.selectAll(".node text").attr("font-weight", "normal");
     }
     
     // Show cycles if enabled
@@ -343,14 +355,14 @@ export default function GraphVisualizer({
               const t = d.target.id || d.target;
               return (s === source && t === target);
             })
-            .attr("stroke", "#ff4500")
+            .attr("stroke", "#008080")
             .attr("stroke-width", 2.5)
             .attr("stroke-opacity", 1)
             .attr("marker-end", "url(#arrow-cycle)");
             
           // Highlight cycle nodes
           svg.selectAll(`.node[data-id="${source}"] circle, .node[data-id="${target}"] circle`)
-            .attr("stroke", "#ff4500")
+            .attr("stroke", "#008080")
             .attr("stroke-width", 2);
         }
       });
@@ -461,7 +473,7 @@ export default function GraphVisualizer({
             <div style={{
               width: "16px", 
               height: "0", 
-              borderTop: "2px solid #ff4500", 
+              borderTop: "2px solid #008080", 
               marginRight: "8px"
             }}></div>
             <span>Cycle</span>

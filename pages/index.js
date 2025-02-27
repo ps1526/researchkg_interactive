@@ -4,6 +4,7 @@ import GraphVisualizer from '../components/GraphVisualizer';
 import Sidebar from '../components/Sidebar';
 import DetailsPanel from '../components/DetailsPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ResizableDetailsPanel from '../components/ResizeableDetailsPanel';
 
 export default function Home() {
   const [graphData, setGraphData] = useState(null);
@@ -280,6 +281,7 @@ export default function Home() {
         flex: 1,
         overflow: "hidden"
       }}>
+        {/* Left sidebar for search and filters */}
         <Sidebar 
           onFileUpload={handleFileUpload}
           graphData={graphData}
@@ -294,39 +296,35 @@ export default function Home() {
           cycleCount={cycles.length}
         />
         
+        {/* Main graph visualization area */}
         <div style={{
           display: "flex", 
-          flexDirection: "column", 
           flex: 1,
-          overflow: "hidden"
+          overflow: "hidden",
+          position: "relative"
         }}>
-          <div style={{
-            position: "relative", 
-            flex: 1,
-            minHeight: "500px"
-          }}>
-            {loading && <LoadingSpinner />}
-            
-            {graphData && (
-              <GraphVisualizer 
-                graphData={graphData}
-                selectedNode={selectedNode}
-                onNodeSelect={handleNodeSelect}
-                highlightedNodes={highlightedNodes}
-                showCycles={showCycles}
-                cycles={cycles}
-              />
-            )}
-          </div>
+          {loading && <LoadingSpinner />}
           
-          {selectedNode && (
-            <DetailsPanel 
-              node={selectedNode} 
-              nodeById={nodeById}
+          {graphData && (
+            <GraphVisualizer 
               graphData={graphData}
+              selectedNode={selectedNode}
+              onNodeSelect={handleNodeSelect}
+              highlightedNodes={highlightedNodes}
+              showCycles={showCycles}
+              cycles={cycles}
             />
           )}
         </div>
+        
+        {/* Right sidebar for details panel (conditionally rendered) */}
+        {selectedNode && (
+          <ResizableDetailsPanel 
+            node={selectedNode} 
+            nodeById={nodeById}
+            graphData={graphData}
+          />
+        )}
       </div>
     </div>
   );
