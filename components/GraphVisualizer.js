@@ -105,6 +105,28 @@ export default function GraphVisualizer({
       .text(d => getTruncatedLabel(d))
       .attr("font-size", "10px")
       .attr("pointer-events", "none");
+
+      node.on("click", (event, d) => {
+        event.stopPropagation();
+        // Make a clean copy of the node data to avoid D3 internal properties
+        const nodeCopy = {
+          id: d.id,
+          type: d.type,
+          title: d.title || '',
+          name: d.name || '',
+          abstract: d.abstract || '',
+          year: d.year || null,
+          venue: d.venue || '',
+          citation_count: d.citation_count || 0,
+          reference_count: d.reference_count || 0,
+          url: d.url || '',
+          is_open_access: d.is_open_access || false,
+          fields_of_study: d.fields_of_study || [],
+          // Include any other properties you need
+          originalData: d  // Keep the original data as well
+        };
+        onNodeSelect(nodeCopy);
+      });
     
     // Create the force simulation
     simulationRef.current = d3.forceSimulation(nodes)

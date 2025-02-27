@@ -131,7 +131,8 @@ export default function Home() {
   };
 
   const handleNodeSelect = (node) => {
-    setSelectedNode(node);
+    console.log("Node selected:", node); // For debugging
+    setSelectedNode(node); // Update state with the selected node
   };
 
   const handleFilterChange = (newFilters) => {
