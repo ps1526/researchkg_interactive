@@ -5,7 +5,7 @@ First, go to the researchkg repo and then generate a EnhancedCitation Graph base
 
 Deployed @ https://researchkgvisualizer.vercel.app
 
-Issues: If you try to upload an output with a lot of nodes, i.e more than about 100, it will be laggy just because of the gravity adjustments for D3 so give it time. Currently, trying to switch to Sigma.js because of the WebGL capabilities so rendering very large citation graphs will be quicker and easier to interact with.
+Issues: If you try to upload a graph with a lot of nodes, i.e more than about 100, it will be laggy just because of the gravity adjustments for D3 so give it time. Currently, trying to switch to Sigma.js because of the WebGL capabilities so rendering very large citation graphs will be quicker and easier to interact with.
 
 Next Steps: Combine both researchkg repo with this one so that it becomes a one stop shop. 
 
