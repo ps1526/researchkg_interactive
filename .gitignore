@@ -1,2 +1,7 @@
 node_modules
 .vercel
+.gitignore
+.env.local
+D3WebGLVisualizer.js
+DetailsPanel.js
+temp.js

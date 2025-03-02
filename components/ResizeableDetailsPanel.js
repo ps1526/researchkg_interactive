@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 export default function ResizableDetailsPanel({ node, nodeById, graphData }) {
   const [width, setWidth] = useState(320); // Initial width
   const [isDragging, setIsDragging] = useState(false);
+  const [authorsExpanded, setAuthorsExpanded] = useState(false);
   const panelRef = useRef(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
@@ -87,6 +88,15 @@ export default function ResizableDetailsPanel({ node, nodeById, graphData }) {
   };
 
   const authorList = getAuthors();
+  const shouldCollapse = authorList.length > 10;
+  const visibleAuthors = shouldCollapse && !authorsExpanded 
+    ? authorList.slice(0, 10) 
+    : authorList;
+
+  // Toggle authors expanded state
+  const toggleAuthorsExpanded = () => {
+    setAuthorsExpanded(!authorsExpanded);
+  };
 
   return (
     <div ref={panelRef} style={{
@@ -156,9 +166,50 @@ export default function ResizableDetailsPanel({ node, nodeById, graphData }) {
           <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
             {authorList.length > 0 && (
               <div>
-                <h3 style={{fontSize: '16px', fontWeight: '600', color: '#4b5563', marginBottom: '8px'}}>Authors</h3>
-                <div style={{display: 'flex', flexWrap: 'wrap', gap: '6px'}}>
-                  {authorList.map(author => (
+                <div style={{
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  marginBottom: '8px'
+                }}>
+                  <h3 style={{fontSize: '16px', fontWeight: '600', color: '#4b5563'}}>
+                    Authors {shouldCollapse && `(${authorList.length})`}
+                  </h3>
+                  
+                  {shouldCollapse && (
+                    <button
+                      onClick={toggleAuthorsExpanded}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#3b82f6',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        padding: '4px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {authorsExpanded ? 'Show Less' : 'Show All'}
+                      <span style={{
+                        marginLeft: '4px',
+                        transform: authorsExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease'
+                      }}>
+                        ▼
+                      </span>
+                    </button>
+                  )}
+                </div>
+                
+                <div style={{
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '6px',
+                  transition: 'max-height 0.3s ease',
+                }}>
+                  {visibleAuthors.map(author => (
                     <span key={author.id} style={{
                       padding: '4px 10px',
                       backgroundColor: '#e2f0e2',
@@ -169,6 +220,22 @@ export default function ResizableDetailsPanel({ node, nodeById, graphData }) {
                       {author.name || author.id}
                     </span>
                   ))}
+                  
+                  {shouldCollapse && !authorsExpanded && (
+                    <span 
+                      onClick={toggleAuthorsExpanded}
+                      style={{
+                        padding: '4px 10px',
+                        backgroundColor: '#f3f4f6',
+                        color: '#4b5563',
+                        borderRadius: '9999px',
+                        fontSize: '14px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      +{authorList.length - 10} more
+                    </span>
+                  )}
                 </div>
               </div>
             )}
