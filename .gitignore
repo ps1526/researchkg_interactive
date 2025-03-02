@@ -5,3 +5,5 @@ node_modules
 D3WebGLVisualizer.js
 DetailsPanel.js
 temp.js
+venv
+.env

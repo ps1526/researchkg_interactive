@@ -1,11 +1,12 @@
 {
     "version": 2,
     "builds": [
-      { "src": "package.json", "use": "@vercel/next" },
-      { "src": "api/generate_graph.py", "use": "@vercel/python" }
+      { 
+        "src": "package.json", 
+        "use": "@vercel/next"
+      }
     ],
     "routes": [
-      { "src": "/api/generate_graph", "dest": "/api/generate_graph.py" },
       { "src": "/(.*)", "dest": "/$1" }
     ]
   }

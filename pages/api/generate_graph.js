@@ -1,6 +1,8 @@
 // pages/api/generate_graph.js
-import { spawn } from 'child_process';
-import path from 'path';
+import fetch from 'node-fetch';
+
+// Configure backend URL
+const backendUrl = process.env.BACKEND_URL ||'http://127.0.0.1:5000';
 
 export default async function handler(req, res) {
   // Only allow POST requests
@@ -19,77 +21,47 @@ export default async function handler(req, res) {
       });
     }
 
-    // Set up the process to run the Python script
-    const pythonProcess = spawn('python', [
-      path.join(process.cwd(), 'api', 'run_citation_graph.py'),
-      '--seed', seedPaper,
-      '--max-papers', maxPapers.toString(),
-      '--max-citations', maxCitationsPerPaper.toString()
-    ]);
-
-    let dataString = '';
-    let errorString = '';
-
-    // Collect data from the Python script
-    pythonProcess.stdout.on('data', (data) => {
-      dataString += data.toString();
+    console.log(`Attempting to connect to backend at: ${backendUrl}/api/generate_graph`);
+    
+    // Prepare the request to the Flask backend - using the exact parameter names expected by Flask
+    const response = await fetch(`${backendUrl}/api/generate_graph`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        seedPaper: seedPaper,
+        maxPapers: maxPapers,
+        maxCitationsPerPaper: maxCitationsPerPaper
+      })
     });
 
-    // Collect any errors
-    pythonProcess.stderr.on('data', (data) => {
-      const message = data.toString();
-      console.error(`Python stderr: ${message}`);
-      
-      // Don't add progress reports to the error string
-      if (!message.includes('PROGRESS:')) {
-        errorString += message;
-      }
-    });
-
-    // Handle the end of the process
-    return new Promise((resolve, reject) => {
-      pythonProcess.on('close', (code) => {
-        if (code !== 0) {
-          console.error(`Python process exited with code ${code}`);
-          console.error(`Error: ${errorString}`);
-          res.status(500).json({ error: errorString || 'Failed to generate graph' });
-          return resolve();
-        }
-
-        try {
-          // Find and extract the JSON part from the output
-          // This handles cases where the Python script outputs text before the JSON
-          let jsonData;
-          try {
-            // First, try to parse the entire output as JSON
-            jsonData = JSON.parse(dataString);
-          } catch (parseError) {
-            // If that fails, try to find JSON in the output
-            const jsonMatch = dataString.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-            if (jsonMatch) {
-              const jsonPart = jsonMatch[0];
-              jsonData = JSON.parse(jsonPart);
-            } else {
-              throw new Error('No valid JSON found in Python output');
-            }
-          }
-          
-          res.status(200).json(jsonData);
-          return resolve();
-        } catch (error) {
-          console.error('Error parsing JSON from Python script:', error);
-          console.error('Python output:', dataString.substring(0, 500) + '...');
-          res.status(500).json({ 
-            error: 'Failed to parse graph data', 
-            details: error.message 
-          });
-          return resolve();
-        }
+    // If the response isn't ok, throw an error
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error(`Backend error (${response.status}):`, errorData);
+      return res.status(response.status).json({ 
+        error: 'Error from backend service', 
+        details: errorData
       });
-    });
+    }
+
+    // Parse and return the JSON response
+    const jsonData = await response.json();
+    return res.status(200).json(jsonData);
+    
   } catch (error) {
-    console.error('API handler error:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    console.error('Detailed fetch error:', {
+
+      message: error.message,
+      code: error.code,
+      type: error.type,
+      errno: error.errno
+    });
+    res.status(500).json({ 
+      error: 'Failed to connect to backend service', 
+      details: `${error.message} (${error.code || 'unknown error code'})`
+    });
   }
 }
 

@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple, Union
 from collections import deque
-
+import sys
 class EnhancedCitationGraphBuilder:
     def __init__(self, api_key: Optional[str] = None, max_papers: int = 20):
         """
@@ -50,6 +50,8 @@ class EnhancedCitationGraphBuilder:
             self._wait_for_rate_limit()
             
             try:
+                print(f"Making request to {endpoint} with API key: {'Yes' if self.headers else 'No'}", file=sys.stderr)
+                
                 response = requests.get(
                     f"{self.base_url}/{endpoint}", 
                     headers=self.headers,
@@ -57,31 +59,39 @@ class EnhancedCitationGraphBuilder:
                     timeout=30
                 )
                 
+                print(f"Response status: {response.status_code}", file=sys.stderr)
+                
                 if response.status_code == 200:
                     return response.json()
+                elif response.status_code == 403:
+                    print(f"Error: API returned Forbidden (403). Check your API key permissions.", file=sys.stderr)
+                    if not self.headers:
+                        print("You are not using an API key. Consider getting one from Semantic Scholar.", file=sys.stderr)
+                    time.sleep(5)  # Longer wait for auth issues
+                    continue
                 elif response.status_code == 429:  # Rate limit
                     wait_time = min(30, 2 ** (attempt + 1))
-                    print(f"Rate limit hit, waiting {wait_time} seconds...")
+                    print(f"Rate limit hit, waiting {wait_time} seconds...", file=sys.stderr)
                     time.sleep(wait_time)
                     continue
                 elif response.status_code == 404:
-                    print(f"Resource not found: {endpoint}")
+                    print(f"Resource not found: {endpoint}", file=sys.stderr)
                     return None
                 else:
-                    print(f"Error making request: {response.status_code} - {endpoint}")
-                    print(f"Response: {response.text[:200]}...")
+                    print(f"Error making request: {response.status_code} - {endpoint}", file=sys.stderr)
+                    print(f"Response: {response.text[:200]}...", file=sys.stderr)
                     if attempt < max_retries - 1:
                         time.sleep(2 ** attempt)
                         continue
                     break
                     
             except requests.exceptions.RequestException as e:
-                print(f"Request failed: {e}")
+                print(f"Request failed: {e}", file=sys.stderr)
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
                     continue
                 break
-                
+                    
         return None
 
     def _clean_attributes(self, attrs: Dict) -> Dict:

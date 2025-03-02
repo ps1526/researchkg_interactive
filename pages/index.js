@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ResizableDetailsPanel from '../components/ResizeableDetailsPanel';
 import FileUploadHandler from '../components/FileUploadHandler';
-import D3WebGLVisualizer from '../components/D3WebGLVisualizer';
+// import D3WebGLVisualizer from '../components/D3WebGLVisualizer';
 import GraphVisualizer from '../components/GraphVisualizer';
 
 
