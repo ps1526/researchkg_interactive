@@ -207,7 +207,7 @@ export default function GraphVisualizer({
         return 8;
       } else if (d.type === "paper") {
         // Scale by citation count
-        const baseSize = 10;
+        const baseSize = 30;
         const scale = d.citation_count ? Math.min(20, Math.sqrt(d.citation_count) / 2) : 0;
         return baseSize + scale;
       } else {
