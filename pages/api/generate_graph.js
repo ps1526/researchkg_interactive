@@ -2,7 +2,7 @@
 import fetch from 'node-fetch';
 
 // Configure backend URL
-const backendUrl = 'http://127.0.0.1:5000';
+const backendUrl = process.env.BACKEND_URL ||'http://127.0.0.1:10000';
 
 export default async function handler(req, res) {
   // Only allow POST requests
