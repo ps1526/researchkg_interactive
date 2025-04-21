@@ -4,7 +4,7 @@ Deployed @ https://researchkg-frontend-352285653331.us-central1.run.app
 
 This tool allows you to create and analyze citation graphs for academic papers. It uses the Semantic Scholar API to retrieve paper data and build a citation graph, and can optionally use Google's Gemini to perform analysis of the graph.
 
-Features
+##Features
 
 Generate citation graphs from a seed paper
 Visualize citation networks and relationships
