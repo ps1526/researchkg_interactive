@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.production
+.env.deploy
+firebase-credentials.json
+.env.local
+.env.development
+.env.deploy.backup
+.env
+/Users/pranavsingh/researchkg_interactive/backend/venv
+Dockerfile
+test_community.py

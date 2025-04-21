@@ -1,5 +1,11 @@
-.gitignore
 check_deployment.sh
 deploy.sh
 start.sh
 dataconnect
+.next/
+restart.sh
+# Environment files
+.env
+.env.*
+# Build directories
+deploy.sh
