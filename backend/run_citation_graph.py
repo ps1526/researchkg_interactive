@@ -4,7 +4,8 @@ import argparse
 import os
 import sys
 import traceback
-from citation_graph_builder import EnhancedCitationGraphBuilder
+from citation_graph.citation_graph_builder import EnhancedCitationGraphBuilder
+from citation_graph.graph_analyzer import GraphAnalyzer
 
 def main():
     # Redirect print statements to stderr
@@ -18,6 +19,11 @@ def main():
         parser.add_argument('--seed', required=True, help='Seed paper title, DOI, or search term')
         parser.add_argument('--max-papers', type=int, default=20, help='Maximum number of papers')
         parser.add_argument('--max-citations', type=int, default=3, help='Maximum citations per paper')
+        parser.add_argument('--analyze', action='store_true', help='Analyze the graph using LLM')
+        parser.add_argument('--analysis-type', choices=['literature', 'advanced_literature', 'cycles', 'custom'], default='literature', 
+                          help='Type of analysis to perform')
+        parser.add_argument('--analysis-query', type=str, help='Custom query for graph analysis')
+        parser.add_argument('--output-file', type=str, help='Path to save the output JSON file')
         args = parser.parse_args()
         
         # Log parameters to stderr
@@ -73,6 +79,53 @@ def main():
                 else:
                     edge_data[key] = str(value)
             graph_data["edges"].append(edge_data)
+        
+        # Perform graph analysis if requested
+        if args.analyze:
+            try:
+                print(f"Analyzing graph with {args.analysis_type} analysis...", file=sys.stderr)
+                
+                # Initialize the graph analyzer
+                gemini_api_key = os.environ.get('GOOGLE_API_KEY')
+                if not gemini_api_key:
+                    print("Warning: GOOGLE_API_KEY not found in environment. Graph analysis will not be performed.", file=sys.stderr)
+                else:
+                    analyzer = GraphAnalyzer(api_key=gemini_api_key)
+                    
+                    # Perform the requested analysis
+                    if args.analysis_type == 'literature':
+                        analysis_result = analyzer.analyze_literature(graph_data)
+                    elif args.analysis_type == 'advanced_literature':
+                        analysis_result = analyzer.create_advanced_literature_review(graph_data)
+                    elif args.analysis_type == 'cycles':
+                        analysis_result = analyzer.explain_cycles(graph_data)
+                    elif args.analysis_type == 'custom' and args.analysis_query:
+                        # Check if query contains chat history (comes from interactive chat)
+                        if "CHAT HISTORY:" in args.analysis_query and "CURRENT QUESTION:" in args.analysis_query:
+                            print("Detected chat context in query", file=sys.stderr)
+                        
+                        analysis_result = analyzer.analyze_graph(graph_data, args.analysis_query)
+                    else:
+                        analysis_result = "No valid analysis type or query provided."
+                    
+                    # Add analysis to the response
+                    graph_data["analysis"] = {
+                        "type": args.analysis_type,
+                        "result": analysis_result
+                    }
+            except Exception as e:
+                print(f"Error during graph analysis: {str(e)}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                # Still include the graph data even if analysis fails
+        
+        # Save to output file if specified
+        if args.output_file:
+            try:
+                with open(args.output_file, 'w', encoding='utf-8') as f:
+                    json.dump(graph_data, f, ensure_ascii=False, indent=2)
+                print(f"Graph data saved to {args.output_file}", file=sys.stderr)
+            except Exception as e:
+                print(f"Error saving to output file: {str(e)}", file=sys.stderr)
         
         # Restore stdout for JSON output
         sys.stdout = original_stdout

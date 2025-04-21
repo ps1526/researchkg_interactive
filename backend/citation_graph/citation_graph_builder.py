@@ -73,10 +73,18 @@ class EnhancedCitationGraphBuilder:
                     wait_time = min(30, 2 ** (attempt + 1))
                     print(f"Rate limit hit, waiting {wait_time} seconds...", file=sys.stderr)
                     time.sleep(wait_time)
+                    # Increase the request interval for subsequent requests
+                    self.request_interval = min(10, self.request_interval * 1.5)
                     continue
                 elif response.status_code == 404:
                     print(f"Resource not found: {endpoint}", file=sys.stderr)
                     return None
+                elif response.status_code >= 500:
+                    # Server error, wait and retry
+                    wait_time = min(60, 5 * (attempt + 1))
+                    print(f"Server error ({response.status_code}), waiting {wait_time} seconds...", file=sys.stderr)
+                    time.sleep(wait_time)
+                    continue
                 else:
                     print(f"Error making request: {response.status_code} - {endpoint}", file=sys.stderr)
                     print(f"Response: {response.text[:200]}...", file=sys.stderr)
@@ -120,13 +128,48 @@ class EnhancedCitationGraphBuilder:
         if paper_id in self.paper_cache:
             return self.paper_cache[paper_id]
         
-        paper = self._make_request(f"paper/{paper_id}", {
+        # Try to handle different ID formats
+        api_paper_id = paper_id
+        if paper_id.startswith('DOI:'):
+            print(f"Querying paper by DOI: {paper_id}")
+        elif paper_id.startswith('ARXIV:'):
+            print(f"Querying paper by arXiv ID: {paper_id}")
+        elif paper_id.startswith('PMID:'):
+            print(f"Querying paper by PubMed ID: {paper_id}")
+        elif paper_id.startswith('URL:'):
+            print(f"Querying paper by URL: {paper_id}")
+        
+        paper = self._make_request(f"paper/{api_paper_id}", {
             "fields": "paperId,title,abstract,authors,venue,year,citationCount,referenceCount," +
                       "fieldsOfStudy,tldr,url,isOpenAccess,openAccessPdf,externalIds," +
                       "publicationDate,journal,publicationTypes,publicationVenue"
         })
         
         if paper and isinstance(paper, dict) and "paperId" in paper:
+            # Enhance paper with additional structured data
+            if "abstract" in paper and paper["abstract"]:
+                # Trim very long abstracts to save memory
+                if len(paper["abstract"]) > 2000:
+                    paper["abstract"] = paper["abstract"][:2000] + "..."
+                    
+            # Add structured field categorization
+            if "fieldsOfStudy" in paper and paper["fieldsOfStudy"]:
+                # Map fields to broader categories
+                field_categories = {
+                    "Computer Science": ["Computer Science", "Artificial Intelligence", "Machine Learning", "Natural Language Processing"],
+                    "Physics": ["Physics", "Quantum Physics", "Astrophysics"],
+                    "Medicine": ["Medicine", "Biology", "Genetics", "Immunology", "Neuroscience"],
+                    "Mathematics": ["Mathematics", "Statistics", "Probability Theory"],
+                    "Social Sciences": ["Economics", "Psychology", "Sociology", "Political Science"]
+                }
+                
+                paper["fieldCategories"] = []
+                for field in paper["fieldsOfStudy"]:
+                    for category, fields in field_categories.items():
+                        if field in fields or any(f.lower() in field.lower() for f in fields):
+                            if category not in paper["fieldCategories"]:
+                                paper["fieldCategories"].append(category)
+            
             self.paper_cache[paper_id] = paper
             return paper
         else:
@@ -138,27 +181,105 @@ class EnhancedCitationGraphBuilder:
         print(f"Resolving paper identifier: {paper_identifier}")
         
         # Check if already a paper ID format or has a prefix
-        if paper_identifier.startswith(('DOI:', 'URL:', 'ARXIV:', 'PMID:')):
+        if (paper_identifier.startswith(('DOI:', 'URL:', 'ARXIV:', 'PMID:', 'MAG:', 'ACL:', 'CORPUS:', 'PMCID:')) or
+            paper_identifier.isalnum()):
             return paper_identifier
+        
+        # Try exact title match first
+        exact_match_result = self._make_request("paper/search/match", {
+            "query": paper_identifier,
+            "fields": "paperId,title,year,authors.name"
+        })
+        
+        if exact_match_result:
+            paper = exact_match_result
+            if "paperId" in paper:
+                match_score = paper.get("matchScore", 0)
+                if match_score > 0.8:  # Strong match confidence
+                    print(f"Found exact paper match: {paper.get('title')} (score: {match_score:.2f})")
+                    return paper.get("paperId")
+                else:
+                    print(f"Found potential paper match: {paper.get('title')} but low score: {match_score:.2f}")
             
-        # Try to search by title
+        # Try to search by title (more general search)
         search_result = self._make_request("paper/search", {
             "query": paper_identifier,
-            "limit": 1,
-            "fields": "paperId,title"
+            "limit": 5,
+            "fields": "paperId,title,year,authors.name,venue,externalIds"
         })
         
         if search_result and "data" in search_result and search_result["data"] and len(search_result["data"]) > 0:
-            paper = search_result["data"][0]
-            if "paperId" in paper:
-                print(f"Found paper: {paper.get('title')}")
-                return paper.get("paperId")
+            # Get the top results
+            candidates = search_result["data"]
+            
+            # Log the candidates we found
+            print(f"Found {len(candidates)} paper candidates:")
+            for i, paper in enumerate(candidates[:3]):  # Show top 3
+                authors = ", ".join([a.get("name", "") for a in paper.get("authors", [])][:3])
+                if len(paper.get("authors", [])) > 3:
+                    authors += " et al."
+                print(f"  {i+1}. {paper.get('title')} ({paper.get('year', 'n/a')}) by {authors}")
+                
+            # Choose the best match - prefer exact title match, then year, then venue quality
+            best_match = None
+            highest_score = 0
+            
+            for paper in candidates:
+                score = 0
+                title_similarity = self._calculate_title_similarity(paper_identifier, paper.get("title", ""))
+                score = title_similarity
+                
+                # Add bonuses for complete information
+                if paper.get("year"):
+                    score += 0.05
+                if paper.get("venue"):
+                    score += 0.05
+                if paper.get("externalIds") and len(paper.get("externalIds", {})) > 0:
+                    score += 0.05 * len(paper.get("externalIds", {}))
+                
+                if score > highest_score:
+                    highest_score = score
+                    best_match = paper
+            
+            if best_match and highest_score > 0.6:  # Reasonable confidence
+                print(f"Selected best match: {best_match.get('title')} (score: {highest_score:.2f})")
+                return best_match.get("paperId")
             else:
-                print(f"Warning: Paper found but missing paperId in search result")
+                print(f"No confident match found (best score: {highest_score:.2f})")
         else:
             print(f"No papers found matching: {paper_identifier}")
         
         return None
+
+    def _calculate_title_similarity(self, query: str, title: str) -> float:
+        """Calculate the similarity between a query and a paper title"""
+        if not query or not title:
+            return 0
+            
+        # Normalize strings
+        query = query.lower().strip()
+        title = title.lower().strip()
+        
+        # Exact match
+        if query == title:
+            return 1.0
+            
+        # Check if query is contained in title (weighted by length ratio)
+        if query in title:
+            return 0.9 * (len(query) / len(title))
+            
+        # Simple word overlap calculation
+        query_words = set(query.split())
+        title_words = set(title.split())
+        
+        if not query_words or not title_words:
+            return 0
+            
+        # Calculate Jaccard similarity
+        intersection = query_words.intersection(title_words)
+        union = query_words.union(title_words)
+        
+        return len(intersection) / len(union)
 
     def add_paper_node(self, paper: Dict) -> bool:
         """Add a paper node to the graph with all relevant attributes"""
@@ -363,7 +484,22 @@ class EnhancedCitationGraphBuilder:
             
             # 3. Look for potential cycles by connecting papers already in the graph
             self._find_potential_cycles(current_paper_id)
+        
+        # 4. Detect communities in the graph
+        print("\nDetecting communities in the final graph...")
+        community_mapping = self.find_communities()
+        
+        # Print community statistics if available
+        if community_mapping:
+            community_counts = {}
+            for community_id in set(community_mapping.values()):
+                community_counts[community_id] = sum(1 for k, v in community_mapping.items() 
+                                                    if v == community_id)
             
+            print("\nCommunity distribution:")
+            for community_id, count in sorted(community_counts.items(), key=lambda x: x[1], reverse=True):
+                print(f"Community {community_id}: {count} papers")
+        
         return self.graph
 
     
@@ -563,6 +699,110 @@ class EnhancedCitationGraphBuilder:
                             else:
                                 raise
 
+    def find_communities(self):
+        """
+        Find communities in the citation graph using the Louvain algorithm.
+        Only paper nodes are considered for community detection, not author nodes.
+        
+        Returns:
+            Dictionary mapping paper IDs to community IDs
+        """
+        print("Finding communities using the Louvain algorithm (papers only)...")
+        
+        # Create a subgraph containing only paper nodes
+        paper_nodes = [node for node, attrs in self.graph.nodes(data=True) 
+                      if attrs.get('type') == 'paper']
+        
+        if not paper_nodes:
+            print("No paper nodes found in the graph.")
+            return {}
+            
+        paper_subgraph = self.graph.subgraph(paper_nodes).copy()
+        
+        # Convert directed graph to undirected for community detection
+        undirected_graph = paper_subgraph.to_undirected()
+        
+        # Find communities using the Louvain algorithm
+        try:
+            # First try with the community_louvain package directly
+            try:
+                import community as community_louvain
+                partition = community_louvain.best_partition(undirected_graph)
+                
+                # Create a mapping of node IDs to community IDs
+                community_mapping = partition
+                
+                # Add community information to nodes in the original graph
+                for node, community_id in community_mapping.items():
+                    if self.graph.has_node(node):
+                        self.graph.nodes[node]['community'] = community_id
+                
+                # Print community statistics
+                communities = {}
+                for node, comm_id in community_mapping.items():
+                    if comm_id not in communities:
+                        communities[comm_id] = []
+                    communities[comm_id].append(node)
+                
+                print(f"Found {len(communities)} communities among {len(paper_nodes)} paper nodes.")
+                community_sizes = [len(c) for c in communities.values()]
+                if community_sizes:
+                    print(f"Largest community: {max(community_sizes)} papers")
+                    print(f"Smallest community: {min(community_sizes)} papers")
+                    avg_size = sum(community_sizes) / len(community_sizes)
+                    print(f"Average community size: {avg_size:.1f} papers")
+                
+                return community_mapping
+                
+            # If direct import fails, fall back to networkx
+            except ImportError:
+                print("community_louvain not available, trying networkx.algorithms.community...")
+                import networkx.algorithms.community as nx_comm
+                communities = nx_comm.louvain_communities(undirected_graph)
+                
+                # Create a mapping of node IDs to community IDs
+                community_mapping = {}
+                for i, community in enumerate(communities):
+                    for node in community:
+                        community_mapping[node] = i
+                        
+                # Add community information to nodes in the original graph
+                for node, community_id in community_mapping.items():
+                    if self.graph.has_node(node):
+                        self.graph.nodes[node]['community'] = community_id
+                
+                # Print community statistics
+                print(f"Found {len(communities)} communities among {len(paper_nodes)} paper nodes.")
+                community_sizes = [len(c) for c in communities]
+                if community_sizes:
+                    print(f"Largest community: {max(community_sizes)} papers")
+                    print(f"Smallest community: {min(community_sizes)} papers")
+                    avg_size = sum(community_sizes) / len(community_sizes)
+                    print(f"Average community size: {avg_size:.1f} papers")
+                
+                return community_mapping
+            
+        except (ImportError, AttributeError) as e:
+            print(f"Error in community detection: {e}")
+            print("Using fallback method for community detection...")
+            
+            # Fallback to connected components if Louvain is not available
+            communities = list(nx.connected_components(undirected_graph))
+            
+            # Create a mapping of node IDs to community IDs
+            community_mapping = {}
+            for i, community in enumerate(communities):
+                for node in community:
+                    community_mapping[node] = i
+                    
+            # Add community information to nodes in the original graph
+            for node, community_id in community_mapping.items():
+                if self.graph.has_node(node):
+                    self.graph.nodes[node]['community'] = community_id
+            
+            print(f"Found {len(communities)} connected components among {len(paper_nodes)} paper nodes.")
+            return community_mapping
+
     def visualize(self, output_file: str = None, show_plot: bool = True, highlight_cycles: bool = True):
         """
         Visualize the citation graph with optional cycle highlighting
@@ -720,10 +960,31 @@ class EnhancedCitationGraphBuilder:
             author_nodes = [n for n, attrs in self.graph.nodes(data=True) if attrs.get('type') == 'author']
             print(f"Graph contains {len(paper_nodes)} papers and {len(author_nodes)} authors")
             
+            # Count communities and add to metadata
+            communities = {}
+            for node, attrs in self.graph.nodes(data=True):
+                if attrs.get('type') == 'paper' and 'community' in attrs:
+                    comm_id = attrs['community']
+                    if comm_id not in communities:
+                        communities[comm_id] = 0
+                    communities[comm_id] += 1
+            
+            if communities:
+                data["metadata"] = {
+                    "communities": {
+                        "count": len(communities),
+                        "distribution": communities
+                    }
+                }
+                print(f"Graph contains {len(communities)} communities")
+            
             try:
                 # Count cycles
                 cycles = list(nx.simple_cycles(self.graph))
                 print(f"Graph contains {len(cycles)} citation cycles")
+                if "metadata" not in data:
+                    data["metadata"] = {}
+                data["metadata"]["cycles_count"] = len(cycles)
             except:
                 print("No cycles found in the graph")
             
