@@ -19,3 +19,8 @@ The tool now supports advanced analysis of citation graphs using Google's Gemini
 1. **Literature Review**: Generate comprehensive literature reviews based on the graph
 2. **Citation Cycle Analysis**: Analyze what citation cycles mean in the research community
 3. **Custom Analysis**: Ask any question about the citation graph
+
+
+## Recent Additions:
+Storing generated graphs in firestore database so users can keep graphs on the cloud instead of having to download and reupload them.
+Currently limited to 10 graphs per user
